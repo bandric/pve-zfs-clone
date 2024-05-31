@@ -1,22 +1,23 @@
 # pve-zfs-clone
-Скрипт для клонирования LXC и KVM
+Proxmox script for cloning LXC and KVM
 
-Сделал интерактивный скрипт для создания клона который не занимает места на старте и создаётся очень быстро. Удалить клон и снимок на коснове которого он создавался можно потом прям с веб-интерфейса проксмокса.
+Wladimir-N/pve-zfs-clone made an interactive script to create a clone that does not take up space at the start and is created very quickly. You can then delete the clone and the snapshot on which it was created directly from the Proxmox web interface.
 https://t.me/ticketssettinru/187
 
-# Установка через git:
+# Installation via git:
 
-1) Клонируем репозиторий
+1) Clone the repository
 
 ```bash
 git clone https://github.com/Wladimir-N/pve-zfs-clone.git
 ```
 
-2) Создаем ссылку на исполняемый файл в директории bin
+2) Create a link to the executable file in the bin directory
 
 ```bash
 chmod +x pve-zfs-clone/pve-zfs-clone
 ln -s $(pwd)/pve-zfs-clone/pve-zfs-clone /usr/local/bin/pve-zfs-clone
 ```
 
-Для вызова утилиты необходимо выполнить `pve-zfs-clone` из любой папки.
+To call the utility, you can run `pve-zfs-clone` from any folder.
+
