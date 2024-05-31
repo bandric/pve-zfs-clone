@@ -1,40 +1,40 @@
 #!/bin/bash
 if [[ "$(zfs version | head -1 | cut -d '~' -f 1)" != "$(zfs version | tail -1 | cut -d '-' -f 1,3,4)" ]]
 then
-	echo "Не соответствие версий ZFS, проверьте вывод команды 'zfs version'. Вероятно необходимо сделать перезагрузку сервера."
+	echo "ZFS versions do not match, check the output of the 'zfs version' command. You may need to reboot the server."
 	exit
 fi
 error () {
 	if [[ $1 = snapshot ]]
 	then
-		echo 'Ошибка при создании снапшота'
+		echo 'Error while creating snapshot'
 	elif [[ $1 = snapshot_destroy ]]
 	then
-		echo 'Ошибка при удалении снапшота'
+		echo 'Error when deleting snapshot'
 	elif [[ $1 = zfsclone ]]
 	then
-		echo 'Ошибка при создании клона из снапшота'
+		echo 'Error when creating a clone from a snapshot'
 	elif [[ $1 = config ]]
 	then
-		echo 'Ошибка при создании конфига контейнера'
+		echo 'Error creating container config'
 	elif [[ $1 = destroyLXC ]]
 	then
-		echo 'Ошибка удаления LXC контейнера'
+		echo 'Error deleting LXC container'
 	elif [[ $1 = duble ]]
 	then
-		echo 'У Вас уже есть такие диски'
+		echo 'Do you already have such disks?'
 	fi
 	exit 1
 }
-VAR=$(whiptail --title "Меню скрипта" --menu \
-	"Вас приветствует скрипт для удобного клонирования и управления клонами в Proxmox" 23 77 16 \
-	"1" "Клонировать" \
-	"2" "Обновить клон" \
-	"3" "Создать шаблон на основе снапшота" 3>&1 1>&2 2>&3) || exit
+VAR=$(whiptail --title "Script menu" --menu \
+	"Welcome to the script for convenient cloning and clone management in Proxmox" 23 77 16 \
+	"1" "Clone" \
+	"2" "Update clone" \
+	"3" "Create a template based on a snapshot" 3>&1 1>&2 2>&3) || exit
 if [ $VAR -eq 1 ]
 then
-	CLONE=$(whiptail --title "Что клонировать?" --menu \
-		"Выберите тип" 23 77 16 \
+	CLONE=$(whiptail --title "What to clone?" --menu \
+		"Select type" 23 77 16 \
 		"1" "LXC" \
 		"2" "KVM" 3>&1 1>&2 2>&3) || exit
 	if [ $CLONE -eq 1 ]
@@ -44,20 +44,20 @@ then
 		do
 			list+=("$VMID" "$Name")
 		done < <(pct list | awk '{print $1,$3}' | awk 'FNR>1')
-		LXC=$(whiptail --title "Какой контейнер?" --menu \
-			"Выберите контейнер, если контейнера нет в списке запустите скрипт на хосте где расположен контейнер" 23 77 16 \
+		LXC=$(whiptail --title "What container?" --menu \
+			"Select a container, if the container is not in the list, run the script on the host where the container is located" 23 77 16 \
 			"${list[@]}" 3>&1 1>&2 2>&3) || exit
 
-		#проверяем, что контейнер не имеет нестандартных подключенных дисков
+		#check that the container does not have non-standard connected disks
 		if [ "$(pct config $LXC | grep -E '(rootfs|mp[0-9]+): .*,size=[0-9]+' | cut -d ':' -f 3 | cut -d ',' -f 1 | cut -d / -f2 | grep $LXC | wc -l)" -eq "$(pct config $LXC | grep -E '(rootfs|mp[0-9]+): .*,size=[0-9]+' | cut -d ':' -f 3 | cut -d ',' -f 1 | cut -d / -f2 | wc -l)" ]
 		then
 			while [ true ]
 			do
-				NEWVMID=$(whiptail --title  "Выбор VMID" --inputbox  "Введите VMID для клона" 10 60 `pvesh get /cluster/nextid` 3>&1 1>&2 2>&3) || exit
-				#проверяем что пользователь указал не занятый ID
+				NEWVMID=$(whiptail --title  "Выбор VMID" --inputbox  "Enter the VMID for the clone" 10 60 `pvesh get /cluster/nextid` 3>&1 1>&2 2>&3) || exit
+				#check that the user specified an unoccupied ID
 				if [ $(cat /etc/pve/.vmlist | awk '{print $1}' | grep -E "$NEWVMID") ]
 				then
-					whiptail --title  "Ошибка" --msgbox  "VMID занят" 10 60
+					whiptail --title  "Error" --msgbox  "VMID is busy" 10 60
 				else
 					break
 				fi
@@ -68,15 +68,15 @@ then
 				zfs clone $(pvesm path $subvolume | cut -c 2-)@VMID$NEWVMID $(pvesm path $subvolume | cut -c 2- | sed "s/$LXC/$NEWVMID/") || error zfsclone
 			done < <(pct config $LXC | grep -E '(rootfs|mp[0-9]+): .*,size=[0-9]+' | awk '{print $2}' | cut -d ',' -f1)
 			pct config $LXC | sed -E "s/(rootfs|mp[0-9]+)(: .*:.*)$LXC(.*,size=[0-9]+)/\1\2$NEWVMID\3/g" > /etc/pve/lxc/$NEWVMID.conf || error config
-			echo -e "\033[0m\n\033[0m\033[31m $LXC => $NEWVMID : контейнер успешно склонирован \033[0m"
+			echo -e "\033[0m\n\033[0m\033[31m $LXC => $NEWVMID : container successfully cloned \033[0m"
 			# Change MAC if needed
-			if (whiptail --title  "Test Yes/No Box" --yesno  "Сгенерировать новый MAC адрес?" 10 60) then
+			if (whiptail --title  "Test Yes/No Box" --yesno  "Generate new MAC address?" 10 60) then
 				pct config $NEWVMID | grep net0 | head -n 1 | awk 'gsub(/,hwaddr=[^,]+/, "")' | awk 'gsub(/net0:/, "")' | xargs -n 1 pct set $NEWVMID -net0
 			else
-				echo -e '\033[0m\n\033[0m\033[31mИсходный MAC адрес сохранен. Смените MAC и IP вручную, если это необходимо!!!\033[0m'
+				echo -e '\033[0m\n\033[0m\033[31mThe original MAC address is saved. Change MAC and IP manually if necessary!!!\033[0m'
 			fi
 		else
-			echo 'Субволюм контейнера который Вы хотите склонировать не имеет в своём имени VMID контейнера. Выполните клонирование в ручном режиме или пересоздайте субволюмы с правильными именами.'
+			echo 'The container subvolume that you want to clone does not have the container VMID in its name. Perform manual cloning or recreate subvolumes with the correct names.'
 			exit
 		fi
 	elif [ $CLONE -eq 2 ]
@@ -86,10 +86,10 @@ then
 		do
 			list+=("$VMID" "$Name")
 		done < <(qm list | awk '{print $1,$2}' | awk 'FNR>1')
-		export QEMU=$(whiptail --title "Какую VM?" --menu \
-			"Выберите VM, если VM нет в списке запустите скрипт на хосте где расположена VM" 23 77 16 \
+		export QEMU=$(whiptail --title "Which VM?" --menu \
+			"Select the VM, if the VM is not in the list, run the script on the host where the VM is located" 23 77 16 \
 			"${list[@]}" \
-			"0" "Выход" 3>&1 1>&2 2>&3)
+			"0" "Exit" 3>&1 1>&2 2>&3)
 		exitstatus=$?
 		if [ $exitstatus -eq 0 ]
 		then
@@ -97,11 +97,11 @@ then
 			do
 				if [ "$(pvesh get /storage/$storage --output-format yaml | grep 'type: ' | awk '{print $2}')" != "zfspool" ]
 				then
-					echo "У данной виртуальной машины есть диски не на ZFS"
+					echo "This virtual machine has non-ZFS disks"
 					exit 1
 				fi
 			done
-			export NEWVMID=$(whiptail --title  "Выбор VMID" --inputbox  "Введите VMID для клона" 10 60 `pvesh get /cluster/nextid` 3>&1 1>&2 2>&3) || exit
+			export NEWVMID=$(whiptail --title  "Which VMID" --inputbox  "Enter the VMID for the clone" 10 60 `pvesh get /cluster/nextid` 3>&1 1>&2 2>&3) || exit
 			qm config $QEMU | grep -v 'parent: ' > /etc/pve/qemu-server/$NEWVMID.conf
 			qm snapshot $QEMU VMID$NEWVMID
 			while read storage name
@@ -116,14 +116,14 @@ then
 				zfs clone $zfs_origin@VMID$NEWVMID $zfs_clone
 				sed -i "s/$storage:$name/$storage:$(echo $name | sed "s/$QEMU/$NEWVMID/g")/g" /etc/pve/qemu-server/$NEWVMID.conf
 			done < <(qm config $NEWVMID | grep -v 'parent: ' | grep -E '(ide|sata|virtio|scsi)[0-9]+: [A-Za-z0-9-]+:[A-Za-z0-9-]+,[A-Za-z0-9,=-]+' | cut -d ':' -f2,3 | cut -d ',' -f1 | tr ':' ' ')
-			echo -e "\033[0m\n\033[0m\033[31m $QEMU => $NEWVMID : Виртуалка склонирована, проверьте настройки, смените MAC интерфейсов при необходимости и настройки ip \033[0m"
+			echo -e "\033[0m\n\033[0m\033[31m $QEMU => $NEWVMID : The virtual machine has been cloned, check the settings, change the MAC interfaces if necessary and change the ip settings \033[0m"
 		else
 			exit 1
 		fi
 	fi
 elif [ $VAR -eq 2 ]
 then
-	# Получаем список клонированных файловых систем
+	# Getting a list of cloned file systems
 	table=$(join \
 		<(sort <(pct list | tail -n +2 | awk '{print $1, "pct", $2, $3}' ; qm list | tail -n +2 | awk '{print $1, "qm", $3, $2}')) \
 		<(sort <(zfs list -H -o name,origin | awk '$2 != "-"' | awk 'match($1, /-[0-9][0-9][0-9]-disk/) { print substr($1, RSTART+1, 3), $0}' \
@@ -131,7 +131,7 @@ then
 	#echo "table" #debug
 	#echo "$table" #debug	
 	
-	# Вычисляем клонированные виртуальные машины и контейнеры
+	# Calculating cloned virtual machines and containers
 	# sort -u группирует строки с одинаковыми парами VMID, VMID_origin. Такие пары будут появляться если VMID имеет несколько склонированных zfs дисков
 	# uniq -u -f5 убирает строки с одинаковыми VMID. Такие строки могут получиться, если VMID имеет несколько склонированных zfs дисков из разных VMID_origin. Такие VMID мы пропускаем
 	table_vmid=$(echo "$table" | awk '{print $1, $2, $3, $4, $7, $1}' | sort -u | uniq -u -f5 )
@@ -141,12 +141,12 @@ then
 	list=()
 	while read VMID Type State Name VMID_origin
 	do
-		list+=("$VMID" "$Name") # !!!! whiptail перестает работать после добавления других столбцов !!!! 
+		list+=("$VMID" "$Name") # !!!! whiptail stops working after adding other columns !!!! 
 	done < <(echo "$table_vmid")
 	
 	while [ true ]; do
-		LXC=$(whiptail --title "Какой контейнер?" --menu \
-			"Выберите контейнер, если контейнера нет в списке запустите скрипт на хосте где расположен контейнер" 23 77 16 \
+		LXC=$(whiptail --title "What container?" --menu \
+			"Select a container, if the container is not in the list, run the script on the host where the container is located" 23 77 16 \
 			"${list[@]}" 3>&1 1>&2 2>&3) || exit
 		
 		# stop ct or vm if needed
@@ -167,8 +167,8 @@ then
 			zfs destroy -r $zfs
 			exitstatus=$?
 			if [ $exitstatus -ne 0 ]; then
-				whiptail --title  "Ошибка" --msgbox  "Вероятно файловая система имеет дочерние клоны, см. ошибку в консоли" 10 60
-				echo -e "\033[0m\n\033[0m\033[31mВероятно файловая система имеет дочерние клоны, см. ошибку в консоли\033[0m"
+				whiptail --title  "Error" --msgbox  "The file system probably has child clones, see the error in the console" 10 60
+				echo -e "\033[0m\n\033[0m\033[31mThe file system probably has child clones, see the error in the console \033[0m"
 				exit
 			fi
 		done < <(echo "$zfs_clone_list")
@@ -198,12 +198,12 @@ then
 			$type start $LXC
 		fi
 		
-		whiptail --title  "Успех" --msgbox  "Клон $LXC успешно обновлен" 10 60
-		echo -e "\033[0m\n\033[0m\033[31mКлон $LXC успешно обновлен\033[0m"
+		whiptail --title  "Success" --msgbox  "Clone $LXC succesfully updated" 10 60
+		echo -e "\033[0m\n\033[0m\033[31mClone $LXC successfully updated\033[0m"
 		exit # It seems to be more convenient, then unlimited for loop
 	done
 	
 elif [ $VAR -eq 3 ]
 then
-	echo 'Функционал ещё не реализован'
+	echo 'Functionality not yet implemented'
 fi
